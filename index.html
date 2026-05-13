@@ -2,55 +2,116 @@
 <html>
 <head>
     <title>WASM Compressor</title>
+    <style>
+        body { font-family: monospace; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        select, button { margin: 4px; padding: 6px 12px; }
+        #output { margin-top: 16px; white-space: pre; background: #f4f4f4; padding: 12px; border-radius: 4px; }
+    </style>
 </head>
 <body>
-    <h1>File Compressor</h1>
-    <input type="file" id="fileInput">
+    <h1>WASM Compressor</h1>
+
+    <input type="file" id="fileInput"><br>
+
+    <label>Algorithm:
+        <select id="algorithm">
+            <option value="rle">RLE</option>
+            <option value="lz77">LZ77</option>
+            <option value="huffman">Huffman</option>
+        </select>
+    </label><br>
+
     <button onclick="compressFile()">Compress</button>
-    <button onclick="downloadCompressed()" id="downloadBtn" style="display:none">Download</button>
-    <div id="output"></div>
+    <button onclick="decompressFile()">Decompress</button>
+    <button onclick="downloadResult()" id="downloadBtn" style="display:none">Download</button>
+
+    <div id="output">Select a file and algorithm, then compress.</div>
 
     <script src="compressor.js"></script>
     <script>
-        let compressedData = null;
-        
+        let resultData = null;
+
         Module.onRuntimeInitialized = () => {
-            const rleCompress = Module.cwrap('rleCompress', 'number', ['number', 'number', 'number']);
-            
-            window.compressFile = function() {
+            const fns = {
+                rle: {
+                    compress:   Module.cwrap('rleCompress',       'number', ['number','number','number']),
+                    decompress: Module.cwrap('rleDecompress',     'number', ['number','number','number']),
+                },
+                lz77: {
+                    compress:   Module.cwrap('lz77Compress',      'number', ['number','number','number']),
+                    decompress: Module.cwrap('lz77Decompress',    'number', ['number','number','number']),
+                },
+                huffman: {
+                    compress:   Module.cwrap('huffmanCompress',   'number', ['number','number','number']),
+                    decompress: Module.cwrap('huffmanDecompress', 'number', ['number','number','number']),
+                },
+            };
+
+            function readFile(callback) {
                 const file = document.getElementById('fileInput').files[0];
                 if (!file) return alert('Select a file first');
-                
                 const reader = new FileReader();
-                reader.onload = function(e) {
-                    const data = new Uint8Array(e.target.result);
-                    const inputLen = data.length;
-                    
-                    const inputPtr = Module._malloc(inputLen);
-                    const outputPtr = Module._malloc(inputLen * 2);
-                    
-                    Module.HEAP8.set(data, inputPtr);
-                    const outputLen = rleCompress(inputPtr, outputPtr, inputLen);
-                    
-                    compressedData = Module.HEAP8.slice(outputPtr, outputPtr + outputLen);
-                    
-                    document.getElementById('output').innerText = 
-                        `Original: ${inputLen} bytes\nCompressed: ${outputLen} bytes\nRatio: ${(outputLen/inputLen*100).toFixed(1)}%`;
-                    document.getElementById('downloadBtn').style.display = 'block';
-                    
-                    Module._free(inputPtr);
-                    Module._free(outputPtr);
-                };
+                reader.onload = e => callback(new Uint8Array(e.target.result));
                 reader.readAsArrayBuffer(file);
+            }
+
+            function runWasm(fn, data) {
+                // Worst-case output buffer: Huffman header (516 b) + 2× input for literals
+                const outSize  = 516 + data.length * 2 + 64;
+                const inputPtr = Module._malloc(data.length);
+                const outputPtr = Module._malloc(outSize);
+
+                Module.HEAPU8.set(data, inputPtr);
+                const outputLen = fn(inputPtr, outputPtr, data.length);
+                const result = Module.HEAPU8.slice(outputPtr, outputPtr + outputLen);
+
+                Module._free(inputPtr);
+                Module._free(outputPtr);
+                return result;
+            }
+
+            window.compressFile = function() {
+                readFile(data => {
+                    const algo = document.getElementById('algorithm').value;
+                    resultData = runWasm(fns[algo].compress, data);
+
+                    const ratio = data.length > 0
+                        ? (resultData.length / data.length * 100 - 1).toFixed(1)
+                        : 'N/A';
+
+                    document.getElementById('output').innerText =
+                        `Algorithm : ${algo.toUpperCase()}\n` +
+                        `Original  : ${data.length} bytes\n` +
+                        `Compressed: ${resultData.length} bytes\n` +
+                        `Ratio     : ${ratio}%`;
+
+                    document.getElementById('downloadBtn').style.display = 'inline';
+                });
             };
-            
-            window.downloadCompressed = function() {
-                const blob = new Blob([compressedData]);
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'compressed.bin';
+
+            window.decompressFile = function() {
+                readFile(data => {
+                    const algo = document.getElementById('algorithm').value;
+                    resultData = runWasm(fns[algo].decompress, data);
+
+                    document.getElementById('output').innerText =
+                        `Algorithm    : ${algo.toUpperCase()}\n` +
+                        `Compressed   : ${data.length} bytes\n` +
+                        `Decompressed : ${resultData.length} bytes`;
+
+                    document.getElementById('downloadBtn').style.display = 'inline';
+                });
+            };
+
+            window.downloadResult = function() {
+                if (!resultData) return;
+                const blob = new Blob([resultData]);
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement('a');
+                a.href     = url;
+                a.download = 'output.bin';
                 a.click();
+                URL.revokeObjectURL(url);
             };
         };
     </script>
