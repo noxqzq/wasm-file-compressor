@@ -18,12 +18,12 @@
 extern "C" {
 
 EMSCRIPTEN_KEEPALIVE
-    int lzCompress(const unsigned char* input, unsigned char* output, int inputLen) {
+    int lz77Compress(const unsigned char* input, unsigned char* output, int inputLen) {
         if (inputLen == 0) {
             return 0;
         }
 
-        int outputPos = 0;
+        int outPos = 0;
         int currPos = 0;
 
         // Search the previous window for the longest possible match
@@ -34,7 +34,7 @@ EMSCRIPTEN_KEEPALIVE
 
             int windowStart = (currPos - WINDOW_SIZE > 0) ? currPos - WINDOW_SIZE : 0;
 
-            for (int i = windowStart; j < currPos; j++) {
+            for (int j = windowStart; j < currPos; j++) {
                 int matchLen = 0;
                 while (matchLen < MAX_MATCH // dont go over token capacity
                     && currPos + matchLen < inputLen // dont run off the input
@@ -49,7 +49,7 @@ EMSCRIPTEN_KEEPALIVE
             }
 
             // Produce a Token
-            if (best >= MIN_MATCH) {
+            if (bestLength >= MIN_MATCH) {
                 // Match token: flag + 2-byte offset (LE) + 1-byte length
                 output[outPos++] = 0x01;
                 output[outPos++] = (unsigned char)(bestOffset & 0xFF); //offset low byte
@@ -66,6 +66,44 @@ EMSCRIPTEN_KEEPALIVE
             }
         }
         
+        return outPos;
+    }
+
+EMSCRIPTEN_KEEPALIVE
+    int lz77Decompress(const unsigned char* input, unsigned char* output, int inputLen) {
+        if (inputLen == 0) {
+            return 0;
+        }
+
+        int inPos = 0; // reading pos
+        int outPos = 0; // writing pos
+
+        while (inPos < inputLen) {
+            unsigned char flag = input[inPos++];
+
+            // Actual token
+            // Just copy the next byte straight to output
+            if (flag == 0x00) {
+                output[outPos++] = input[inPos++];
+            }
+
+            // Match the token (Read offset (2 bytes, LE) and length (1 byte))
+
+            else {
+                int offset = (int)input[inPos] | ((int)input[inPos + 1] << 8);
+                int length = (int)input[inPos + 2];
+                inPos += 3;
+
+                // Copy 'length' bytes from (outPos - offset) in the output buffer.
+                // We copy byte-by-byte (not memcpy) because the source and destination
+                // can overlap — that's intentional for runs like AAAAA.
+
+                int copyFrom = outPos - offset;
+                for (int k = 0; k < length; k++) {
+                    output[outPos++] = output[copyFrom + k];
+                }
+            }
+        }
         return outPos;
     }
 

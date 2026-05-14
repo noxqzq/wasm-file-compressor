@@ -29,7 +29,7 @@ wasm-compressor/
 emcc algorithms/rle.cpp algorithms/lz77.cpp algorithms/huffman.cpp \
   -o compressor.js \
   -s WASM=1 \
-  -s EXPORTED_FUNCTIONS='["_rleCompress","_rleDecompress","_huffmanCompress","_huffmanDecompress","_malloc","_free"]' \
+  -s EXPORTED_FUNCTIONS='["_rleCompress","_rleDecompress","_lz77Compress","_lz77Decompress","_huffmanCompress","_huffmanDecompress","_malloc","_free"]' \
   -s EXPORTED_RUNTIME_METHODS='["cwrap","HEAPU8"]' \
   -s ALLOW_MEMORY_GROWTH=1 \
   -O2
@@ -46,6 +46,6 @@ Open localhost:8000 in browser.
 
 <b>RLE:</b> Run-Length Encoding - compresses repeated charactersls
 
-<b>LZ77:</b> Dictionary-based - finds repeated patterns
+<b>LZ77:</b>Sliding Window-based - finds repeated patterns
 
 <b>Huffman:</b> Frequency-based - encodes common bytes with fewer bits
