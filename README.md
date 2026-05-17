@@ -6,11 +6,12 @@ Browser-based file compression tool using C++ and WebAssembly. Performs high-per
 ```
 wasm-compressor/
 ├── algorithms/
-│ ├── rle.cpp                  # Run-Length Encoding
-│ ├── lz77.cpp                 # LZ77 Dictionary Compression
-│ └── huffman.cpp              # Huffman Encoding
-├── index.html # Web interface
-├── compressor.cpp              # Main compression entry point
+│   ├── huffman_internal.h       # Huffman Internals (Functions for huffman.cpp and Zstd.cpp)
+│   ├── rle.cpp                  # Run-Length Encoding
+│   ├── lz77.cpp                 # LZ77 Dictionary Compression
+│   ├── huffman.cpp              # Huffman Encoding
+│   └── zstd.cpp                 # Zstandard Compression
+├── index.html                   # Web interface
 ├── .gitignore
 └── README.md
 ```
